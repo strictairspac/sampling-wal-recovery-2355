@@ -31,11 +31,16 @@ SEED_DEMO=true时启动自动执行种子；自然键查重，不覆盖用户修
 
 crash_after=N表示前N条日志已持久化。最近静止检查点保存全部数据页，检查点后数据页假定均未写回（no-force）。恢复重放日志写入和已abort的撤销，再按LSN倒序撤销未结束事务。独立oracle从检查点账本仅应用已提交事务写入，结果须相同。输出重做/撤销轨迹、事务集合、各阶段账本、SHA256和模型版本。空输入、未知键、事务顺序非法、检查点有活动事务、写锁冲突、崩溃点超限均拒绝。模型不涉及页LSN、CLR、模糊检查点或真实磁盘故障；不是完整ARIES实现。
 
+## 增量备份链
+备份绑定同一日志集及静止检查点：首份保存检查点时的全量账本（full），后续只存相对父备份变化的键（incr），chain_hash把父哈希、日志集、检查点与载荷串成链，链深上限32。恢复前核验整条链与后续日志：缺父、哈希不符（篡改）、跨日志集拼接、检查点非静止、物化账本与日志重放不一致均拒绝，避免用错误账本覆盖数据。演练可从备份排队：崩溃点不得早于备份检查点，排队即冻结链证据与日志输入，新备份不改变已排队输入；worker运行时重新核验链，结果账本与成功状态同一事务提交。
+
+回收备份保护后代与排队/执行中演练所需祖先，阻止原因在备份链页面可查。制作子备份与排队演练都对链环取行锁，与回收互斥，不留下悬空引用；回收在单事务内删除并清理依赖记录，已回收时幂等返回，失败重试不重复回收。
+
 ## 工程与开发
 前端原生HTML/CSS/JS+Nginx1.27；后端Python3.11+FastAPI+SQLAlchemy+PyJWT；PostgreSQL16和Redis7；5服务均healthcheck。持久任务队列在PG，单worker通过Redis锁互斥。20条待执行配额，审计记录写入操作，JWT8小时、PBKDF2随机盐密码。后端路由不含/api，Nginx/api/去前缀代理。
 
-目录frontend/src/{api,stores,types,components/common,hooks,pages,router,utils,constants}与backend/src/{routes,controllers,services,models,schemas,middlewares,utils,constants,config}。本地开发安装backend/requirements.txt并设DATABASE_URL/REDIS_URL/JWT_SECRET，再运行uvicorn src.main:app；前端需代理/api。migrations记录初始化结构，暂无在线升级器。
+目录frontend/src/{api,stores,types,components/common,hooks,pages,router,utils,constants}与backend/src/{routes,controllers,services,models,schemas,middlewares,utils,constants,config}。本地开发安装backend/requirements.txt并设DATABASE_URL/REDIS_URL/JWT_SECRET，再运行uvicorn src.main:app；前端需代理/api。migrations记录初始化结构，暂无在线升级器。备份链验证：backend目录下设DATABASE_URL后运行python -m scripts.verify_backups（默认用临时SQLite，生产语义以PostgreSQL行锁为准）。
 
 环境COMPOSE_PROJECT_NAME控制命名，FRONTEND_PORT/BACKEND_PORT/DB_PORT为18246/19246/17746，DB_PASSWORD控制演示数据库密码，JWT_SECRET签名密钥，SEED_DEMO控制种子。命名卷db-data/redis-data/artifacts；共享artifacts预留，导出由冻结快照即时生成。Google Fonts需外网，业务离线可运行。默认凭据仅本地演示。
 
-共享枚举roles与任务states定义于backend/src/constants/enums.py、frontend/src/constants/enums.js，状态使用models/entities.py/services/recovery_service.py/worker.py/components/common/status.js；日志操作类型在schemas/log_set.py和pages/logs.js中声明/说明。MIT许可。真实验证见批次test-artifacts/gb-4107/TESTING.md。
+共享枚举roles、任务states与备份kinds定义于backend/src/constants/enums.py、frontend/src/constants/enums.js，状态使用models/entities.py/services/recovery_service.py/worker.py/components/common/status.js；日志操作类型在schemas/log_set.py和pages/logs.js中声明/说明。MIT许可。真实验证见批次test-artifacts/gb-4107/TESTING.md。

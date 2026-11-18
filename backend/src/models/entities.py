@@ -38,3 +38,19 @@ class Audit(Base):
     actor: Mapped[str]=mapped_column(String(120))
     action: Mapped[str]=mapped_column(String(120))
     created_at: Mapped[datetime]=mapped_column(DateTime,default=now)
+class Backup(Base):
+    __tablename__='backups'
+    id: Mapped[int]=mapped_column(primary_key=True)
+    log_set_id: Mapped[int]=mapped_column(ForeignKey('log_sets.id'))
+    label: Mapped[str]=mapped_column(String(120),unique=True)
+    parent_id: Mapped[int | None]=mapped_column(ForeignKey('backups.id'),nullable=True)
+    kind: Mapped[str]=mapped_column(String(10))
+    checkpoint_lsn: Mapped[int]=mapped_column(Integer)
+    payload: Mapped[dict]=mapped_column(JSON)
+    chain_hash: Mapped[str]=mapped_column(String(64))
+    created_at: Mapped[datetime]=mapped_column(DateTime,default=now)
+class RecoveryBackup(Base):
+    __tablename__='recovery_backups'
+    id: Mapped[int]=mapped_column(primary_key=True)
+    recovery_id: Mapped[int]=mapped_column(Integer)
+    backup_id: Mapped[int]=mapped_column(Integer)

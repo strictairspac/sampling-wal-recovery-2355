@@ -32,6 +32,17 @@ def validate(initial,records):
         else:raise ValueError(f'LSN {lsn}: 未知操作')
     return True
 
+def ledger_at(initial,records,upto):
+    """Replay records[:upto] from initial. Caller guarantees validity (log sets are validated on save)."""
+    state=copy.deepcopy(initial);active={}
+    for r in records[:upto]:
+        op=r.get('op');tx=r.get('tx')
+        if op=='write':active.setdefault(tx,[]).append((r['key'],state[r['key']]));state[r['key']]=r['value']
+        elif op=='abort':
+            for key,before in reversed(active.pop(tx,[])):state[key]=before
+        elif op=='commit':active.pop(tx,None)
+    return state
+
 def recover(initial,records,crash_after):
     validate(initial,records)
     if not isinstance(crash_after,int) or not 0<=crash_after<=len(records):raise ValueError('崩溃点超出日志范围')
